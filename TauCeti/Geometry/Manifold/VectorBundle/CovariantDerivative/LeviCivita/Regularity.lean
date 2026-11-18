@@ -1,0 +1,442 @@
+/-
+Copyright (c) 2026 The Tau Ceti contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: The Tau Ceti contributors
+-/
+module
+
+public import TauCeti.Geometry.Manifold.VectorBundle.CovariantDerivative.AlongCurve.Regularity
+public import TauCeti.Geometry.Manifold.VectorBundle.CovariantDerivative.LeviCivita.Basic
+public import TauCeti.Geometry.Manifold.VectorBundle.CovariantDerivative.LocalFrame
+public import TauCeti.Geometry.Manifold.VectorBundle.Riemannian.Riesz
+public import TauCeti.Geometry.Manifold.VectorField.Regularity
+
+/-!
+# Regularity of the Levi-Civita connection
+
+On a `C^m` manifold carrying a `C^k` Riemannian metric, Mathlib's Levi-Civita connection
+`CovariantDerivative.leviCivitaConnection` is `C^n` once `n + 2 ≤ m` and `n + 1 ≤ k`: it sends a
+`C^(n+1)` section of the tangent bundle to a `C^n` section of `Hom(TM, TM)`. This file proves
+that, in the class form `ContMDiffCovariantDerivative` which Mathlib's covariant-derivative API
+consumes — a class which already carries that one-derivative loss, asking a `C^(n+1)` section to
+produce a `C^n` one — together with the set-local form on an arbitrary open set. Taking
+`n = m = k = ∞` the loss is invisible and **the Levi-Civita connection of a `C^∞` metric on a
+`C^∞` manifold is `C^∞`**, which is the instance
+`CovariantDerivative.instContMDiffCovariantDerivativeLeviCivitaConnection`.
+
+The proof follows the Koszul formula `2 ⟪∇_X Y, Z⟫ = koszul I X Y Z`. The right-hand side is built
+from derivatives of pointwise inner products and from Lie brackets, so it loses exactly one degree
+of smoothness; that is where `n + 1 ≤ k` comes from, and the extra degree in `n + 2 ≤ m` is the
+one Mathlib's Lie-bracket regularity asks of the manifold. Concretely:
+
+* `TauCeti.Manifold.contMDiffOn_koszul` reads the Koszul expression as a sum of directional
+  derivatives of inner products (`ContMDiffOn.contMDiffOn_mvfderiv_apply`) and of inner products
+  with Lie brackets (`ContMDiffWithinAt.mlieBracketWithin_vectorField`);
+* the fibrewise Riesz dual of `Riemannian.Tensor.contMDiffAt_rieszDual` turns smoothness of the
+  numbers `⟪∇_{e_j} σ, e_k⟫` into smoothness of the vector fields `∇_{e_j} σ`, for `e` the
+  chart-local frame;
+* `TauCeti.Manifold.contMDiffOn_hom_of_localFrame` assembles those directions into the hom-bundle
+  section `∇σ` demanded by `ContMDiffCovariantDerivativeOn`.
+
+With the class available, the local Christoffel data of
+`TauCeti.Geometry.Manifold.VectorBundle.CovariantDerivative.LocalFrame` becomes unconditional for
+the Levi-Civita connection: its scalar Christoffel symbols and its model-space Christoffel map are
+`C^n` on the base set of every trivialization in the atlas.
+
+The ambient orders `m` and `k` are carried as instance arguments and compared to the conclusion by
+the hypotheses `n + 2 ≤ m` and `n + 1 ≤ k`, rather than being spelled `n + 2` and `n + 1`
+outright, so that the `C^∞` case remains an instantiation: Mathlib's instance search derives
+`IsManifold I m M` from `IsManifold I ∞ M` for `m = ∞`, but not `IsManifold I (n + 2) M` for a
+variable `n`. The low-order hypotheses `[IsManifold I 2 M]` and
+`[IsContMDiffRiemannianBundle I 1 E _]`, which `CovariantDerivative.leviCivitaConnection` needs
+merely to be written down, are carried for the same reason.
+
+## Main results
+
+* `TauCeti.Manifold.contMDiffOn_koszulBilinear_family`: the same, jointly in the parameter and
+  the point, for a family of bilinear pairings parametrized by a manifold.
+* `TauCeti.Manifold.contMDiffOn_koszulBilinear`: the Koszul expression of a `C^(n+1)` bilinear
+  pairing and three `C^(n+1)` vector fields is `C^n`, without symmetry or nondegeneracy.
+* `TauCeti.Manifold.contMDiffOn_koszul`: the Koszul expression of three `C^(n+1)` sections is
+  `C^n`.
+* `CovariantDerivative.contMDiffOn_leviCivitaConnection`: on an open set, the Levi-Civita connection
+  carries a `C^(n+1)` section to a `C^n` section of `Hom(TM, TM)`.
+* `CovariantDerivative.contMDiffCovariantDerivativeOn_leviCivitaConnection` and the instance
+  `CovariantDerivative.instContMDiffCovariantDerivativeLeviCivitaConnection`: **the Levi-Civita
+  connection is of class `C^n`**, and in particular `C^∞` for a `C^∞` metric.
+* `CovariantDerivative.contMDiffOn_christoffelSymbol_leviCivitaConnection` and
+  `CovariantDerivative.contMDiffOn_christoffelMap_leviCivitaConnection`: its Christoffel symbols and
+  its model-space Christoffel map are `C^n` on a trivialization base set.
+* `TauCeti.Manifold.contMDiffOn_alongCurveWithin_leviCivitaConnection` and
+  `TauCeti.Manifold.differentiableWithinAt_sectionCoord_alongCurveWithin_leviCivitaConnection`:
+  along a curve on a `C³` manifold with a `C²` metric, the Levi-Civita derivative of a section
+  with a `C²` tangent-bundle lift has a `C¹` lift and differentiable coordinate readings.
+* `TauCeti.Manifold.contMDiffWithinAt_alongCurveWithin_leviCivitaConnection` and
+  `TauCeti.Manifold.contMDiffAt_alongCurve_leviCivitaConnection`: the pointwise forms, for a
+  section whose lift is `C²` at a single parameter.
+
+## References
+
+* M. P. do Carmo, *Riemannian Geometry*, Birkhäuser, 1992, Ch. 2, §3.
+* J. M. Lee, *Introduction to Riemannian Manifolds*, GTM 176, 2018, Thm. 5.10.
+-/
+
+public section
+
+open Bundle FiberBundle Module NormedSpace Set VectorField
+open scoped ContDiff Manifold Topology
+
+noncomputable section
+
+namespace TauCeti.Manifold
+
+variable
+  {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
+  {H : Type*} [TopologicalSpace H] {I : ModelWithCorners ℝ E H}
+  {M : Type*} [TopologicalSpace M] [ChartedSpace H M]
+  {n m : ℕ∞ω} [IsManifold I 1 M] [IsManifold I m M]
+
+section Bilinear
+
+variable [CompleteSpace E]
+  {EP : Type*} [NormedAddCommGroup EP] [NormedSpace ℝ EP]
+  {HP : Type*} [TopologicalSpace HP] {IP : ModelWithCorners ℝ EP HP}
+  {P : Type*} [TopologicalSpace P] [ChartedSpace HP P] [IsManifold IP 1 P]
+
+/-- The Koszul expressions of a family of fields of bilinear forms, parametrized by `P` and jointly
+`C^(n+1)` in the parameter and the point, and of three `C^(n+1)` vector fields are jointly `C^n`
+on the product of `P` with an open set. Neither symmetry nor nondegeneracy is needed. -/
+theorem contMDiffOn_koszulBilinear_family {s : Set M} (hs : IsOpen s) (hm : n + 2 ≤ m)
+    {b : P → (x : M) → TangentSpace I x →L[ℝ] TangentSpace I x →L[ℝ] ℝ}
+    (hb : ContMDiffOn (IP.prod I) (I.prod 𝓘(ℝ, E →L[ℝ] E →L[ℝ] ℝ)) (n + 1)
+      (fun q : P × M ↦ TotalSpace.mk' (E →L[ℝ] E →L[ℝ] ℝ)
+        (E := fun y : M ↦ TangentSpace I y →L[ℝ] TangentSpace I y →L[ℝ] ℝ) q.2 (b q.1 q.2))
+      (univ ×ˢ s))
+    {X Y Z : Π x : M, TangentSpace I x}
+    (hX : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (X y)) s)
+    (hY : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Y y)) s)
+    (hZ : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Z y)) s) :
+    ContMDiffOn (IP.prod I) 𝓘(ℝ) n (fun q : P × M ↦ koszulBilinear I (b q.1) X Y Z q.2)
+      (univ ×ˢ s) := by
+  -- The two smoothness levels that Mathlib's Lie-bracket regularity asks of the manifold; over
+  -- `ℝ` the `minSmoothness` guard is the identity.
+  have hmin : IsManifold I (minSmoothness ℝ 2) M :=
+    IsManifold.of_le (n := m) (by simpa using le_add_self.trans hm)
+  have hsucc : IsManifold I (n + 1 + 1) M :=
+    IsManifold.of_le (n := m) (by rwa [add_assoc, one_add_one_eq_two])
+  have hW : IsOpen (univ ×ˢ s : Set (P × M)) := isOpen_univ.prod hs
+  -- Vector fields on `M` are read on `P × M` through the second projection.
+  have hlift {j : ℕ∞ω} {U : Π x : M, TangentSpace I x}
+      (hU : ContMDiffOn I (I.prod 𝓘(ℝ, E)) j (fun y ↦ TotalSpace.mk' E y (U y)) s) :
+      ContMDiffOn (IP.prod I) (I.prod 𝓘(ℝ, E)) j
+        (fun q : P × M ↦ TotalSpace.mk' E q.2 (U q.2)) (univ ×ˢ s) :=
+    hU.comp contMDiffOn_snd fun _ hq ↦ hq.2
+  have hbracket {U V : Π x : M, TangentSpace I x}
+      (hU : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (U y)) s)
+      (hV : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (V y)) s) :
+      ContMDiffOn I (I.prod 𝓘(ℝ, E)) n
+        (fun y ↦ TotalSpace.mk' E y (mlieBracket I U V y)) s := by
+    have hbr : ContMDiffOn I (I.prod 𝓘(ℝ, E)) n
+        (fun y ↦ TotalSpace.mk' E y (mlieBracketWithin I U V s y)) s := fun y hy ↦
+      (hU y hy).mlieBracketWithin_vectorField (hV y hy) hs.uniqueMDiffOn hy (by simp)
+    refine hbr.congr fun y hy ↦ ?_
+    rw [mlieBracketWithin_of_isOpen hs hy]
+  have hpair {j : ℕ∞ω} (hj : j ≤ n + 1)
+      {U V : Π x : M, TangentSpace I x}
+      (hU : ContMDiffOn I (I.prod 𝓘(ℝ, E)) j (fun y ↦ TotalSpace.mk' E y (U y)) s)
+      (hV : ContMDiffOn I (I.prod 𝓘(ℝ, E)) j (fun y ↦ TotalSpace.mk' E y (V y)) s) :
+      ContMDiffOn (IP.prod I) 𝓘(ℝ) j (fun q : P × M ↦ b q.1 q.2 (U q.2) (V q.2))
+        (univ ×ˢ s) := by
+    intro q hq
+    have h := ContMDiffWithinAt.clm_bundle_apply₂ (F₃ := ℝ) (E₃ := fun _ : M ↦ ℝ)
+      ((hb.of_le hj) q hq) (hlift hU q hq) (hlift hV q hq)
+    simpa using (contMDiffWithinAt_totalSpace_iff.mp h).2
+  have hderiv {U V W : Π x : M, TangentSpace I x}
+      (hU : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (U y)) s)
+      (hV : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (V y)) s)
+      (hW' : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (W y)) s) :
+      ContMDiffOn (IP.prod I) 𝓘(ℝ) n
+        (fun q : P × M ↦ mvfderiv I (fun z ↦ b q.1 z (U z) (V z)) q.2 (W q.2)) (univ ×ˢ s) :=
+    (hpair le_rfl hU hV).contMDiffOn_mvfderiv_snd_apply hW (hlift (hW'.of_le le_self_add)) le_rfl
+  refine ContMDiffOn.congr ?_ fun q _ ↦ koszulBilinear_apply (b q.1) X Y Z q.2
+  exact (((hderiv hY hZ hX).add (hderiv hZ hX hY)).sub (hderiv hX hY hZ)).add
+    (hpair le_self_add (hbracket hX hY) (hZ.of_le le_self_add))
+      |>.sub (hpair le_self_add (hbracket hX hZ) (hY.of_le le_self_add))
+      |>.sub (hpair le_self_add (hbracket hY hZ) (hX.of_le le_self_add))
+
+/-- The Koszul expression of a `C^(n+1)` field of bilinear forms and three `C^(n+1)`
+vector fields is `C^n` on an open set. Neither symmetry nor nondegeneracy is needed. -/
+theorem contMDiffOn_koszulBilinear {s : Set M} (hs : IsOpen s) (hm : n + 2 ≤ m)
+    {b : (x : M) → TangentSpace I x →L[ℝ] TangentSpace I x →L[ℝ] ℝ}
+    (hb : ContMDiffOn I (I.prod 𝓘(ℝ, E →L[ℝ] E →L[ℝ] ℝ)) (n + 1)
+      (fun y ↦ TotalSpace.mk' (E →L[ℝ] E →L[ℝ] ℝ) y (b y)) s)
+    {X Y Z : Π x : M, TangentSpace I x}
+    (hX : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (X y)) s)
+    (hY : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Y y)) s)
+    (hZ : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Z y)) s) :
+    ContMDiffOn I 𝓘(ℝ) n (koszulBilinear I b X Y Z) s := by
+  -- Regard `b` as a constant family over `ℝ` and restrict to the slice through `0`.
+  have h := contMDiffOn_koszulBilinear_family (IP := 𝓘(ℝ)) (b := fun _ : ℝ ↦ b) hs hm
+    (hb.comp contMDiffOn_snd fun _ hq ↦ hq.2) hX hY hZ
+  exact h.comp (contMDiffOn_const.prodMk contMDiffOn_id) fun x hx ↦ ⟨mem_univ 0, hx⟩
+
+end Bilinear
+
+variable
+  {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [FiniteDimensional ℝ E]
+  {H : Type*} [TopologicalSpace H] {I : ModelWithCorners ℝ E H}
+  {M : Type*} [TopologicalSpace M] [ChartedSpace H M]
+  [RiemannianBundle (fun x : M ↦ TangentSpace I x)] {n m k : ℕ∞ω}
+  [IsManifold I 1 M] [IsManifold I m M]
+  [IsContMDiffRiemannianBundle I k E (fun x : M ↦ TangentSpace I x)]
+
+/-- **The Koszul expression of three `C^(n+1)` sections is `C^n`.** Both the derivative terms and
+the Lie-bracket terms lose one degree of smoothness, whence the two hypotheses on the smoothness
+of the manifold and of the metric. -/
+theorem contMDiffOn_koszul {s : Set M} (hs : IsOpen s) (hm : n + 2 ≤ m) (hk : n + 1 ≤ k)
+    {X Y Z : Π x : M, TangentSpace I x}
+    (hX : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (X y)) s)
+    (hY : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Y y)) s)
+    (hZ : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Z y)) s) :
+    ContMDiffOn I 𝓘(ℝ) n (koszul I X Y Z) s := by
+  have hmetric : IsContMDiffRiemannianBundle I (n + 1) E (fun x : M ↦ TangentSpace I x) :=
+    IsContMDiffRiemannianBundle.of_le (n := k) hk
+  obtain ⟨b, hb, hinner⟩ := hmetric.exists_contMDiff
+  refine (contMDiffOn_koszulBilinear hs hm hb.contMDiffOn hX hY hZ).congr fun y _ ↦ ?_
+  simp only [koszul_apply, koszulBilinear_apply, ← hinner]
+
+end TauCeti.Manifold
+
+namespace CovariantDerivative
+
+open TauCeti TauCeti.Manifold Riemannian.Tensor
+
+variable
+  {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [FiniteDimensional ℝ E]
+  {H : Type*} [TopologicalSpace H] {I : ModelWithCorners ℝ E H}
+  {M : Type*} [TopologicalSpace M] [ChartedSpace H M]
+  [RiemannianBundle (fun x : M ↦ TangentSpace I x)]
+  [IsManifold I 2 M] [IsContMDiffRiemannianBundle I 1 E (fun x : M ↦ TangentSpace I x)]
+
+section Finite
+
+variable {n m k : ℕ∞ω} [IsManifold I m M]
+  [IsContMDiffRiemannianBundle I k E (fun x : M ↦ TangentSpace I x)]
+
+/-- The Levi-Civita connection differentiates a `C^(n+1)` vector field along a `C^(n+1)` vector
+field `Z` with one derivative lost, on an open subset `s` of a chart domain. Each direction of the
+connection is the Riesz dual of half the Koszul functional. -/
+private theorem contMDiffOn_leviCivitaConnection_apply [IsManifold I (n + 1) M]
+    [IsManifold I (n + 1 + 1) M]
+    [IsContMDiffRiemannianBundle I n E (fun x : M ↦ TangentSpace I x)] {s : Set M} {a : M}
+    (hs : IsOpen s) (hsub : s ⊆ (chartAt H a).source) (hm : n + 2 ≤ m) (hk : n + 1 ≤ k)
+    {σ Z : Π x : M, TangentSpace I x}
+    (hσ : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (σ y)) s)
+    (hZ : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (Z y)) s) :
+    ContMDiffOn I (I.prod 𝓘(ℝ, E)) n
+      (fun y ↦ TotalSpace.mk' E y (leviCivitaConnection I M σ y (Z y))) s := by
+  have hσd {y : M} (hy : y ∈ s) : MDiffAt (T% σ) y :=
+    (hσ.mdifferentiableOn (by simp)).mdifferentiableAt (hs.mem_nhds hy)
+  have hZd {y : M} (hy : y ∈ s) : MDiffAt (T% Z) y :=
+    (hZ.mdifferentiableOn (by simp)).mdifferentiableAt (hs.mem_nhds hy)
+  have hrepr (y : M) : rieszDual (I := I) y ((rieszDual (I := I) y).symm
+      (leviCivitaConnection I M σ y (Z y))) = leviCivitaConnection I M σ y (Z y) :=
+    LinearIsometryEquiv.apply_symm_apply _ _
+  have hval (y : M) (w : TangentSpace I y) :
+      ((rieszDual (I := I) y).symm (leviCivitaConnection I M σ y (Z y))) w =
+        inner ℝ (leviCivitaConnection I M σ y (Z y)) w := by
+    conv_rhs => rw [← hrepr y]
+    exact (inner_rieszDual _ w).symm
+  have heval (l : Fin (finrank ℝ E)) : ContMDiffOn I 𝓘(ℝ) n
+      (fun y ↦ ((rieszDual (I := I) y).symm (leviCivitaConnection I M σ y (Z y)))
+        (chartLocalFrame (I := I) a l y)) s := by
+    have hframe : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1)
+        (fun y ↦ TotalSpace.mk' E y (chartLocalFrame (I := I) a l y)) s :=
+      (contMDiffOn_chartLocalFrame (I := I) (n := n + 1) a l).mono
+        (by rw [TangentBundle.trivializationAt_baseSet]; exact hsub)
+    have hmul : ContMDiffOn I 𝓘(ℝ) n (fun y ↦ (2 : ℝ)⁻¹ *
+        koszul I Z σ (chartLocalFrame (I := I) a l) y) s :=
+      contMDiffOn_const.mul (contMDiffOn_koszul hs hm hk hZ hσ hframe)
+    refine hmul.congr fun y hy ↦ ?_
+    have h := two_inner_leviCivitaConnection_eq_koszul (I := I) (M := M) (hZd hy) (hσd hy)
+      (((hframe.mdifferentiableOn (by simp)).mdifferentiableAt (hs.mem_nhds hy)))
+    rw [hval y]
+    linarith
+  have hfun : (fun y : M ↦ TotalSpace.mk' E y (leviCivitaConnection I M σ y (Z y))) =
+      fun y : M ↦ TotalSpace.mk' E y (rieszDual (I := I) y
+        ((rieszDual (I := I) y).symm (leviCivitaConnection I M σ y (Z y)))) := by
+    funext y
+    rw [hrepr y]
+  rw [hfun]
+  exact fun y hy ↦ (contMDiffAt_rieszDual (I := I) (n := n) a (hsub hy)
+    (Φ := fun y ↦ (rieszDual (I := I) y).symm (leviCivitaConnection I M σ y (Z y)))
+    fun l ↦ (heval l).contMDiffAt (hs.mem_nhds hy)).contMDiffWithinAt
+
+/-- **The Levi-Civita connection differentiates with one derivative lost.** On an open set `u`, a
+section of the tangent bundle which is `C^(n+1)` on `u` has a covariant derivative which is `C^n`
+on `u` as a section of `Hom(TM, TM)`. -/
+theorem contMDiffOn_leviCivitaConnection {u : Set M} (hu : IsOpen u) (hm : n + 2 ≤ m)
+    (hk : n + 1 ≤ k) {σ : Π x : M, TangentSpace I x}
+    (hσ : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1) (fun y ↦ TotalSpace.mk' E y (σ y)) u) :
+    ContMDiffOn I (I.prod 𝓘(ℝ, E →L[ℝ] E)) n
+      (fun y ↦ TotalSpace.mk' (E →L[ℝ] E)
+        (E := fun y : M ↦ (TangentSpace I y →L[ℝ] TangentSpace I y)) y
+          (leviCivitaConnection I M σ y)) u := by
+  have hone : IsManifold I (n + 1) M :=
+    IsManifold.of_le (n := m) ((by gcongr; norm_num : n + 1 ≤ n + 2).trans hm)
+  have hsucc : IsManifold I (n + 1 + 1) M :=
+    IsManifold.of_le (n := m) (by rwa [add_assoc, one_add_one_eq_two])
+  have hmetric : IsContMDiffRiemannianBundle I n E (fun x : M ↦ TangentSpace I x) :=
+    IsContMDiffRiemannianBundle.of_le (n := k) (le_self_add.trans hk)
+  have hbundle : ContMDiffVectorBundle n E (TangentSpace I : M → Type _) I :=
+    TangentBundle.contMDiffVectorBundle
+  intro x hx
+  -- Work on the intersection of `u` with the chart domain at `x`, where the chart-local frame
+  -- and the fibrewise Riesz dual are available.
+  set s : Set M := u ∩ (chartAt H x).source
+  have hsopen : IsOpen s := hu.inter (chartAt H x).open_source
+  have hsub : s ⊆ (chartAt H x).source := inter_subset_right
+  have hxs : x ∈ s := ⟨hx, mem_chart_source H x⟩
+  have hσs : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1)
+      (fun y ↦ TotalSpace.mk' E y (σ y)) s := hσ.mono inter_subset_left
+  have hframe (i : Fin (finrank ℝ E)) : ContMDiffOn I (I.prod 𝓘(ℝ, E)) (n + 1)
+      (fun y ↦ TotalSpace.mk' E y (chartLocalFrame (I := I) x i y)) s :=
+    (contMDiffOn_chartLocalFrame (I := I) (n := n + 1) x i).mono
+      (by rw [TangentBundle.trivializationAt_baseSet]; exact hsub)
+  have hdir (j : Fin (finrank ℝ E)) : ContMDiffOn I (I.prod 𝓘(ℝ, E)) n
+      (fun y ↦ TotalSpace.mk' E y
+        (leviCivitaConnection I M σ y (chartLocalFrame (I := I) x j y))) s :=
+    contMDiffOn_leviCivitaConnection_apply hsopen hsub hm hk hσs (hframe j)
+  -- Testing the hom-bundle section on the chart-local frame gives smoothness at `x`.
+  have hhom := contMDiffOn_hom_of_localFrame (I := I) (n := n) (u := s)
+    (e := trivializationAt E (TangentSpace I) x) (e' := trivializationAt E (TangentSpace I) x)
+    (finBasis ℝ E) (f := fun y ↦ y) contMDiffOn_id
+    (by rw [TangentBundle.trivializationAt_baseSet, inter_self]; exact hsub)
+    (A := fun y ↦ leviCivitaConnection I M σ y)
+    (fun j ↦ by simpa only [← chartLocalFrame_def] using hdir j)
+  exact (hhom.contMDiffAt (hsopen.mem_nhds hxs)).contMDiffWithinAt
+
+/-- **The Levi-Civita connection is of class `C^n`**, in the set-local form used to read it in a
+local frame. -/
+theorem contMDiffCovariantDerivativeOn_leviCivitaConnection {u : Set M} (hu : IsOpen u)
+    (hm : n + 2 ≤ m) (hk : n + 1 ≤ k) :
+    ContMDiffCovariantDerivativeOn E n (leviCivitaConnection I M).toFun u where
+  contMDiff hσ := contMDiffOn_leviCivitaConnection hu hm hk hσ
+
+variable {ι : Type*} (b : Basis ι ℝ E)
+  {e : Trivialization E (TotalSpace.proj : TangentBundle I M → M)} [MemTrivializationAtlas e]
+
+/-- The scalar Christoffel symbols of the Levi-Civita connection in a local frame are `C^n` on
+the base set of the trivialization defining the frame. -/
+theorem contMDiffOn_christoffelSymbol_leviCivitaConnection (hm : n + 2 ≤ m) (hk : n + 1 ≤ k)
+    (i j l : ι) :
+    ContMDiffOn I 𝓘(ℝ) n
+      (christoffelSymbol I b e (leviCivitaConnection I M).toFun i j l) e.baseSet := by
+  have := contMDiffCovariantDerivativeOn_leviCivitaConnection (I := I) (M := M) e.open_baseSet hm hk
+  have hone : IsManifold I (n + 1) M :=
+    IsManifold.of_le (n := m) ((by gcongr; norm_num : n + 1 ≤ n + 2).trans hm)
+  have hsucc : IsManifold I (n + 1 + 1) M :=
+    IsManifold.of_le (n := m) (by rwa [add_assoc, one_add_one_eq_two])
+  have : ContMDiffVectorBundle n E (TangentSpace I : M → Type _) I :=
+    TangentBundle.contMDiffVectorBundle
+  have : ContMDiffVectorBundle (n + 1) E (TangentSpace I : M → Type _) I :=
+    TangentBundle.contMDiffVectorBundle
+  exact contMDiffOn_christoffelSymbol b i j l
+
+/-- The model-space Christoffel map of the Levi-Civita connection is `C^n` on the base set of the
+trivialization defining its coordinates. -/
+theorem contMDiffOn_christoffelMap_leviCivitaConnection [Fintype ι] (hm : n + 2 ≤ m)
+    (hk : n + 1 ≤ k) :
+    ContMDiffOn I 𝓘(ℝ, E →L[ℝ] E →L[ℝ] E) n
+      (christoffelMap b ((leviCivitaConnection I M).isCovariantDerivativeOn (s := e.baseSet)))
+      e.baseSet := by
+  have := contMDiffCovariantDerivativeOn_leviCivitaConnection (I := I) (M := M) e.open_baseSet hm hk
+  have hone : IsManifold I (n + 1) M :=
+    IsManifold.of_le (n := m) ((by gcongr; norm_num : n + 1 ≤ n + 2).trans hm)
+  have hsucc : IsManifold I (n + 1 + 1) M :=
+    IsManifold.of_le (n := m) (by rwa [add_assoc, one_add_one_eq_two])
+  have : ContMDiffVectorBundle n E (TangentSpace I : M → Type _) I :=
+    TangentBundle.contMDiffVectorBundle
+  have : ContMDiffVectorBundle (n + 1) E (TangentSpace I : M → Type _) I :=
+    TangentBundle.contMDiffVectorBundle
+  exact contMDiffOn_christoffelMap b _
+
+end Finite
+
+/-- **The Levi-Civita connection of a `C^∞` metric on a `C^∞` manifold is `C^∞`.** -/
+instance instContMDiffCovariantDerivativeLeviCivitaConnection [IsManifold I ∞ M]
+    [IsContMDiffRiemannianBundle I ∞ E (fun x : M ↦ TangentSpace I x)] :
+    ContMDiffCovariantDerivative (leviCivitaConnection I M) ∞ where
+  contMDiff := contMDiffCovariantDerivativeOn_leviCivitaConnection (n := ∞) (m := ∞) (k := ∞)
+    isOpen_univ le_rfl le_rfl
+
+end CovariantDerivative
+
+namespace TauCeti.Manifold
+
+open CovariantDerivative
+
+variable
+  {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [FiniteDimensional ℝ E]
+  {H : Type*} [TopologicalSpace H] {I : ModelWithCorners ℝ E H}
+  {M : Type*} [TopologicalSpace M] [ChartedSpace H M] [IsManifold I 3 M]
+  [RiemannianBundle (fun x : M ↦ TangentSpace I x)]
+  [IsContMDiffRiemannianBundle I 2 E (fun x : M ↦ TangentSpace I x)]
+  {γ : ℝ → M} {V : ∀ t, TangentSpace I (γ t)} {s : Set ℝ} {t : ℝ}
+
+/-- The Levi-Civita covariant derivative within a parameter set with unique derivatives of a
+section whose tangent-bundle lift is `C²` within that set at `t` has a lift that is `C¹` within
+the set at `t`. Only regularity at `t` is assumed, and only a `C³` manifold with a `C²` metric,
+which make the Levi-Civita connection `C¹`. -/
+theorem contMDiffWithinAt_alongCurveWithin_leviCivitaConnection (hs : UniqueDiffOn ℝ s)
+    (ht : t ∈ s)
+    (hV : ContMDiffWithinAt 𝓘(ℝ, ℝ) I.tangent 2 (fun r ↦ TotalSpace.mk' E (γ r) (V r)) s t) :
+    ContMDiffWithinAt 𝓘(ℝ, ℝ) I.tangent 1
+      (fun r ↦ TotalSpace.mk' E (γ r)
+        (alongCurveWithin (leviCivitaConnection I M) γ V s r)) s t := by
+  let : IsManifold I (1 + 1) M := IsManifold.of_le (n := 3) (by norm_num)
+  let : IsManifold I (1 + 1 + 1) M := IsManifold.of_le (n := 3) (by norm_num)
+  let : ContMDiffVectorBundle (1 + 1) E (TangentSpace I : M → Type _) I :=
+    TangentBundle.contMDiffVectorBundle
+  let : ContMDiffCovariantDerivativeOn E 1 (leviCivitaConnection I M).toFun
+      (trivializationAt E (TangentSpace I) (γ t)).baseSet :=
+    contMDiffCovariantDerivativeOn_leviCivitaConnection (m := 3) (k := 2)
+      (trivializationAt E (TangentSpace I) (γ t)).open_baseSet (by norm_num) (by norm_num)
+  exact CovariantDerivative.contMDiffWithinAt_alongCurveWithin (n := 1)
+    (leviCivitaConnection I M) γ V hs ht
+    (FiberBundle.mem_baseSet_trivializationAt E (TangentSpace I) (γ t)) hV
+
+/-- The Levi-Civita covariant derivative of a section whose tangent-bundle lift is `C²` at `t`
+has a lift that is `C¹` at `t`. Only regularity at `t` is assumed; the section need not extend to
+a vector field. -/
+theorem contMDiffAt_alongCurve_leviCivitaConnection
+    (hV : ContMDiffAt 𝓘(ℝ, ℝ) I.tangent 2 (fun r ↦ TotalSpace.mk' E (γ r) (V r)) t) :
+    ContMDiffAt 𝓘(ℝ, ℝ) I.tangent 1
+      (fun r ↦ TotalSpace.mk' E (γ r) (alongCurve (leviCivitaConnection I M) γ V r)) t := by
+  simpa only [contMDiffWithinAt_univ, alongCurveWithin_univ] using
+    contMDiffWithinAt_alongCurveWithin_leviCivitaConnection uniqueDiffOn_univ (mem_univ t)
+      hV.contMDiffWithinAt
+
+/-- The Levi-Civita covariant derivative of a section with a `C²` tangent-bundle lift, within a
+parameter set with unique derivatives, has a `C¹` tangent-bundle lift. -/
+theorem contMDiffOn_alongCurveWithin_leviCivitaConnection (hs : UniqueDiffOn ℝ s)
+    (hV : ContMDiffOn 𝓘(ℝ, ℝ) I.tangent 2 (fun r ↦ TotalSpace.mk' E (γ r) (V r)) s) :
+    ContMDiffOn 𝓘(ℝ, ℝ) I.tangent 1
+      (fun r ↦ TotalSpace.mk' E (γ r)
+        (alongCurveWithin (leviCivitaConnection I M) γ V s r)) s :=
+  fun _ ht ↦ contMDiffWithinAt_alongCurveWithin_leviCivitaConnection hs ht (hV _ ht)
+
+/-- The Levi-Civita covariant derivative of a section with a `C²` tangent-bundle lift, within a
+parameter set with unique derivatives, has differentiable coordinate readings there. -/
+theorem differentiableWithinAt_sectionCoord_alongCurveWithin_leviCivitaConnection
+    (hs : UniqueDiffOn ℝ s)
+    (hV : ContMDiffOn 𝓘(ℝ, ℝ) I.tangent 2 (fun r ↦ TotalSpace.mk' E (γ r) (V r)) s)
+    (ht : t ∈ s) :
+    DifferentiableWithinAt ℝ
+      (sectionCoord (F := E) γ (alongCurveWithin (leviCivitaConnection I M) γ V s) (γ t)) s t :=
+  TauCeti.Manifold.differentiableWithinAt_sectionCoord γ _
+    ((contMDiffOn_alongCurveWithin_leviCivitaConnection hs hV t ht).mdifferentiableWithinAt
+      one_ne_zero)
+    (FiberBundle.mem_baseSet_trivializationAt E (TangentSpace I) (γ t))
+
+end TauCeti.Manifold

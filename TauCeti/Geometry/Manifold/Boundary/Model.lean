@@ -1,0 +1,384 @@
+/-
+Copyright (c) 2026 The Tau Ceti contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: The Tau Ceti contributors
+-/
+module
+
+public import Mathlib.Geometry.Manifold.Instances.Real
+public import TauCeti.LinearAlgebra.Dual.Lemmas
+
+/-!
+# The boundary model of a Euclidean half-space
+
+This file identifies the frontier of Mathlib's `(n + 1)`-dimensional manifold-with-boundary
+model `𝓡∂ (n + 1)` with the boundaryless model `𝓡 n`.  Concretely, the frontier is the
+coordinate hyperplane where the zeroth coordinate vanishes; deleting that coordinate gives a
+continuous linear equivalence with `EuclideanSpace ℝ (Fin n)`.
+
+The construction is the standard-model prerequisite for putting a manifold structure on the
+boundary of a manifold modeled on a Euclidean half-space.  The parametrization and projection API
+below is intended to let boundary charts use this identification without unfolding its coordinate
+construction.  The file also splits the ambient Euclidean space into boundary and normal
+coordinates; the boundary inclusion and the standard product collar both use this one coordinate
+equivalence, and `TauCeti.euclideanFinConsEquiv` is the same equivalence with the boundary
+coordinates given as a function on `Fin k`, reindexed along `k = n`.  Finally,
+`ContinuousLinearMap.exists_pos_eq_mul_apply_zero_of_eventually_pos` recognises a linear functional
+that is positive off the hyperplane near a boundary point within the half-space as a positive
+multiple of the boundary coordinate.
+-/
+
+public section
+
+open Function Set
+
+open scoped Manifold
+
+namespace TauCeti
+
+/-- Identify `EuclideanSpace ℝ (Fin n) × ℝ` with `EuclideanSpace ℝ (Fin (n + 1))` by
+placing the real factor in the zeroth coordinate.  The first factor parametrizes the boundary
+hyperplane and the second is its normal coordinate. -/
+noncomputable def euclideanHalfSpaceBoundaryNormalEquiv (n : ℕ) :
+    (EuclideanSpace ℝ (Fin n) × ℝ) ≃L[ℝ] EuclideanSpace ℝ (Fin (n + 1)) :=
+  (ContinuousLinearEquiv.prodComm ℝ (EuclideanSpace ℝ (Fin n)) ℝ).trans <|
+    ((ContinuousLinearEquiv.refl ℝ ℝ).prodCongr (EuclideanSpace.equiv (Fin n) ℝ)).trans <|
+      (Fin.consEquivL ℝ (fun _ : Fin (n + 1) ↦ ℝ)).trans
+        (EuclideanSpace.equiv (Fin (n + 1)) ℝ).symm
+
+/-- The boundary-normal equivalence places the normal coordinate in coordinate zero. -/
+@[simp]
+theorem euclideanHalfSpaceBoundaryNormalEquiv_apply_zero (n : ℕ)
+    (x : EuclideanSpace ℝ (Fin n)) (r : ℝ) :
+    euclideanHalfSpaceBoundaryNormalEquiv n (x, r) 0 = r := by
+  simp [euclideanHalfSpaceBoundaryNormalEquiv]
+
+/-- The boundary-normal equivalence places the boundary coordinates after coordinate zero. -/
+@[simp]
+theorem euclideanHalfSpaceBoundaryNormalEquiv_apply_succ (n : ℕ)
+    (x : EuclideanSpace ℝ (Fin n)) (r : ℝ) (i : Fin n) :
+    euclideanHalfSpaceBoundaryNormalEquiv n (x, r) i.succ = x i := by
+  simp [euclideanHalfSpaceBoundaryNormalEquiv]
+
+/-- The continuous linear equivalence `(t, v) ↦ (t, v ∘ Fin.cast hk.symm)` of `ℝ × (Fin k → ℝ)`
+with `ℝⁿ⁺¹`, for `k = n`: the scalar `t` is the normal coordinate in slot `0`, and `v`, reindexed
+along `k = n` by `LinearEquiv.funCongrLeft`, gives the coordinates in slots `1, …, n`. It is the
+boundary-normal identification `TauCeti.euclideanHalfSpaceBoundaryNormalEquiv n` after this
+reindexing. -/
+noncomputable def euclideanFinConsEquiv {k n : ℕ} (hk : k = n) :
+    (ℝ × (Fin k → ℝ)) ≃L[ℝ] EuclideanSpace ℝ (Fin (n + 1)) :=
+  (ContinuousLinearEquiv.prodComm ℝ ℝ (Fin k → ℝ)).trans <|
+    (((LinearEquiv.funCongrLeft ℝ ℝ (finCongr hk.symm)).toContinuousLinearEquiv.trans
+      (EuclideanSpace.equiv (Fin n) ℝ).symm).prodCongr (ContinuousLinearEquiv.refl ℝ ℝ)).trans
+    (euclideanHalfSpaceBoundaryNormalEquiv n)
+
+/-- The zeroth coordinate of `TauCeti.euclideanFinConsEquiv` is the normal coordinate. -/
+@[simp]
+theorem euclideanFinConsEquiv_apply_zero {k n : ℕ} (hk : k = n) (p : ℝ × (Fin k → ℝ)) :
+    euclideanFinConsEquiv hk p 0 = p.1 := by
+  simp [euclideanFinConsEquiv]
+
+/-- The coordinates of `TauCeti.euclideanFinConsEquiv` in slots `1, …, n` are the tangential
+coordinates, reindexed along `k = n`. -/
+@[simp]
+theorem euclideanFinConsEquiv_apply_succ {k n : ℕ} (hk : k = n) (p : ℝ × (Fin k → ℝ))
+    (i : Fin n) : euclideanFinConsEquiv hk p i.succ = p.2 (Fin.cast hk.symm i) := by
+  simp [euclideanFinConsEquiv]
+
+/-- The inverse of `TauCeti.euclideanFinConsEquiv` reads the normal coordinate from slot `0`. -/
+@[simp]
+theorem euclideanFinConsEquiv_symm_apply_fst {k n : ℕ} (hk : k = n)
+    (v : EuclideanSpace ℝ (Fin (n + 1))) : ((euclideanFinConsEquiv hk).symm v).1 = v 0 := by
+  simpa using (euclideanFinConsEquiv_apply_zero hk ((euclideanFinConsEquiv hk).symm v)).symm
+
+/-- The inverse of `TauCeti.euclideanFinConsEquiv` reads the tangential coordinates from slots
+`1, …, n`, reindexed along `k = n`. -/
+@[simp]
+theorem euclideanFinConsEquiv_symm_apply_snd {k n : ℕ} (hk : k = n)
+    (v : EuclideanSpace ℝ (Fin (n + 1))) (j : Fin k) :
+    ((euclideanFinConsEquiv hk).symm v).2 j = v (Fin.cast hk j).succ := by
+  simpa using
+    (euclideanFinConsEquiv_apply_succ hk ((euclideanFinConsEquiv hk).symm v) (Fin.cast hk j)).symm
+
+/-- The coordinate hyperplane which is the boundary of the `(n + 1)`-dimensional Euclidean
+half-space. -/
+def euclideanHalfSpaceBoundary (n : ℕ) :
+    Submodule ℝ (EuclideanSpace ℝ (Fin (n + 1))) where
+  carrier := {x | x 0 = 0}
+  zero_mem' := by simp
+  add_mem' := by
+    intro x y hx hy
+    simp only [Set.mem_ofPred_eq] at hx hy ⊢
+    simp [hx, hy]
+  smul_mem' := by
+    intro c x hx
+    simp only [Set.mem_ofPred_eq] at hx ⊢
+    simp [hx]
+
+@[simp]
+theorem mem_euclideanHalfSpaceBoundary {n : ℕ} {x : EuclideanSpace ℝ (Fin (n + 1))} :
+    x ∈ euclideanHalfSpaceBoundary n ↔ x 0 = 0 :=
+  Iff.rfl
+
+/-- Insert a zero as the zeroth coordinate, parametrizing the boundary of a Euclidean
+half-space by a Euclidean space of dimension one less. -/
+noncomputable def euclideanHalfSpaceBoundaryParam (n : ℕ) :
+    EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin (n + 1)) :=
+  (euclideanHalfSpaceBoundaryNormalEquiv n).toContinuousLinearMap.comp
+    (ContinuousLinearMap.inl ℝ (EuclideanSpace ℝ (Fin n)) ℝ)
+
+@[simp]
+theorem euclideanHalfSpaceBoundaryParam_apply_zero {n : ℕ}
+    (x : EuclideanSpace ℝ (Fin n)) :
+    euclideanHalfSpaceBoundaryParam n x 0 = 0 :=
+  by simp [euclideanHalfSpaceBoundaryParam]
+
+@[simp]
+theorem euclideanHalfSpaceBoundaryParam_apply_succ {n : ℕ}
+    (x : EuclideanSpace ℝ (Fin n)) (i : Fin n) :
+    euclideanHalfSpaceBoundaryParam n x i.succ = x i :=
+  by simp [euclideanHalfSpaceBoundaryParam]
+
+/-- The boundary-normal equivalence at normal coordinate zero is the boundary parametrization. -/
+@[simp]
+theorem euclideanHalfSpaceBoundaryNormalEquiv_apply_zero_eq_boundaryParam (n : ℕ)
+    (x : EuclideanSpace ℝ (Fin n)) :
+    euclideanHalfSpaceBoundaryNormalEquiv n (x, 0) =
+      euclideanHalfSpaceBoundaryParam n x := by
+  ext i
+  refine Fin.cases ?_ (fun j ↦ ?_) i <;> simp
+
+/-- Delete the zeroth coordinate of a point in `(n + 1)`-dimensional Euclidean space. -/
+noncomputable def euclideanHalfSpaceBoundaryProj (n : ℕ) :
+    EuclideanSpace ℝ (Fin (n + 1)) →L[ℝ] EuclideanSpace ℝ (Fin n) :=
+  (ContinuousLinearMap.fst ℝ (EuclideanSpace ℝ (Fin n)) ℝ).comp
+    (euclideanHalfSpaceBoundaryNormalEquiv n).symm.toContinuousLinearMap
+
+@[simp]
+theorem euclideanHalfSpaceBoundaryProj_apply {n : ℕ}
+    (x : EuclideanSpace ℝ (Fin (n + 1))) (i : Fin n) :
+    euclideanHalfSpaceBoundaryProj n x i = x i.succ :=
+  by
+    rw [euclideanHalfSpaceBoundaryProj, ContinuousLinearMap.comp_apply]
+    -- `comp_apply` leaves the bundled first projection; expose its product application.
+    change ((euclideanHalfSpaceBoundaryNormalEquiv n).symm x).1 i = x i.succ
+    rw [← euclideanHalfSpaceBoundaryNormalEquiv_apply_succ n
+      ((euclideanHalfSpaceBoundaryNormalEquiv n).symm x).1
+      ((euclideanHalfSpaceBoundaryNormalEquiv n).symm x).2 i]
+    exact congrArg (fun z : EuclideanSpace ℝ (Fin (n + 1)) ↦ z i.succ)
+      ((euclideanHalfSpaceBoundaryNormalEquiv n).apply_symm_apply x)
+
+/-- The boundary component of the inverse boundary-normal equivalence deletes coordinate zero. -/
+@[simp]
+theorem euclideanHalfSpaceBoundaryNormalEquiv_symm_apply_fst (n : ℕ)
+    (y : EuclideanSpace ℝ (Fin (n + 1))) :
+    ((euclideanHalfSpaceBoundaryNormalEquiv n).symm y).1 =
+      euclideanHalfSpaceBoundaryProj n y := by
+  ext i
+  rw [euclideanHalfSpaceBoundaryProj_apply]
+  symm
+  calc
+    y i.succ = euclideanHalfSpaceBoundaryNormalEquiv n
+        ((euclideanHalfSpaceBoundaryNormalEquiv n).symm y) i.succ :=
+      congrArg (fun z : EuclideanSpace ℝ (Fin (n + 1)) ↦ z i.succ)
+        ((euclideanHalfSpaceBoundaryNormalEquiv n).apply_symm_apply y).symm
+    _ = ((euclideanHalfSpaceBoundaryNormalEquiv n).symm y).1 i :=
+      euclideanHalfSpaceBoundaryNormalEquiv_apply_succ ..
+
+/-- The normal component of the inverse boundary-normal equivalence is coordinate zero. -/
+@[simp]
+theorem euclideanHalfSpaceBoundaryNormalEquiv_symm_apply_snd (n : ℕ)
+    (y : EuclideanSpace ℝ (Fin (n + 1))) :
+    ((euclideanHalfSpaceBoundaryNormalEquiv n).symm y).2 = y 0 := by
+  symm
+  calc
+    y 0 = euclideanHalfSpaceBoundaryNormalEquiv n
+        ((euclideanHalfSpaceBoundaryNormalEquiv n).symm y) 0 :=
+      congrArg (fun z : EuclideanSpace ℝ (Fin (n + 1)) ↦ z 0)
+        ((euclideanHalfSpaceBoundaryNormalEquiv n).apply_symm_apply y).symm
+    _ = ((euclideanHalfSpaceBoundaryNormalEquiv n).symm y).2 :=
+      euclideanHalfSpaceBoundaryNormalEquiv_apply_zero ..
+
+@[simp]
+theorem euclideanHalfSpaceBoundaryProj_param {n : ℕ}
+    (x : EuclideanSpace ℝ (Fin n)) :
+    euclideanHalfSpaceBoundaryProj n (euclideanHalfSpaceBoundaryParam n x) = x := by
+  ext i
+  simp
+
+@[simp]
+theorem euclideanHalfSpaceBoundaryParam_proj {n : ℕ}
+    {x : EuclideanSpace ℝ (Fin (n + 1))} (hx : x ∈ euclideanHalfSpaceBoundary n) :
+    euclideanHalfSpaceBoundaryParam n (euclideanHalfSpaceBoundaryProj n x) = x := by
+  ext i
+  refine Fin.cases ?_ (fun j ↦ ?_) i
+  · simpa using hx.symm
+  · simp
+
+@[simp]
+theorem euclideanHalfSpaceBoundaryParam_proj_eq_iff {n : ℕ}
+    {x : EuclideanSpace ℝ (Fin (n + 1))} :
+    euclideanHalfSpaceBoundaryParam n (euclideanHalfSpaceBoundaryProj n x) = x ↔
+      x ∈ euclideanHalfSpaceBoundary n := by
+  constructor
+  · intro h
+    rw [← h]
+    simp
+  · exact euclideanHalfSpaceBoundaryParam_proj
+
+theorem euclideanHalfSpaceBoundaryParam_injective (n : ℕ) :
+    Function.Injective (euclideanHalfSpaceBoundaryParam n) :=
+  fun _ _ h ↦ by simpa using congrArg (euclideanHalfSpaceBoundaryProj n) h
+
+@[simp]
+theorem range_euclideanHalfSpaceBoundaryParam (n : ℕ) :
+    range (euclideanHalfSpaceBoundaryParam n) = euclideanHalfSpaceBoundary n := by
+  ext x
+  constructor
+  · rintro ⟨y, rfl⟩
+    simp
+  · intro hx
+    exact ⟨euclideanHalfSpaceBoundaryProj n x,
+      euclideanHalfSpaceBoundaryParam_proj hx⟩
+
+/-- The coordinate hyperplane is the frontier of Mathlib's Euclidean half-space model. -/
+theorem euclideanHalfSpaceBoundary_eq_frontier (n : ℕ) :
+    (euclideanHalfSpaceBoundary n : Set (EuclideanSpace ℝ (Fin (n + 1)))) =
+      frontier (range (modelWithCornersEuclideanHalfSpace (n + 1))) := by
+  rw [frontier_range_modelWithCornersEuclideanHalfSpace]
+  ext x
+  simp [eq_comm]
+
+namespace EuclideanHalfSpace
+
+variable {n : ℕ}
+
+/-- Parametrize the boundary of the `(n + 1)`-dimensional Euclidean half-space by inserting a
+zero as the zeroth coordinate. -/
+noncomputable def boundaryParam (n : ℕ) :
+    EuclideanSpace ℝ (Fin n) → EuclideanHalfSpace (n + 1) :=
+  fun x ↦ ⟨euclideanHalfSpaceBoundaryParam n x, by simp⟩
+
+/-- Delete the zeroth coordinate of a point of the `(n + 1)`-dimensional Euclidean half-space. -/
+noncomputable def boundaryProj (n : ℕ) :
+    EuclideanHalfSpace (n + 1) → EuclideanSpace ℝ (Fin n) :=
+  fun y ↦ euclideanHalfSpaceBoundaryProj n y.1
+
+/-- The parametrized boundary point, read in the ambient Euclidean space. -/
+@[simp]
+theorem boundaryParam_coe (x : EuclideanSpace ℝ (Fin n)) :
+    (boundaryParam n x).1 = euclideanHalfSpaceBoundaryParam n x := (rfl)
+
+/-- The boundary projection agrees with the ambient linear projection. -/
+@[simp]
+theorem boundaryProj_coe (y : EuclideanHalfSpace (n + 1)) :
+    boundaryProj n y = euclideanHalfSpaceBoundaryProj n y.1 := (rfl)
+
+/-- The coordinates of the boundary projection are the positive-index coordinates. -/
+theorem boundaryProj_apply (y : EuclideanHalfSpace (n + 1)) (i : Fin n) :
+    boundaryProj n y i = y.1 i.succ := by
+  rw [boundaryProj_coe, euclideanHalfSpaceBoundaryProj_apply]
+
+/-- Deleting the zeroth coordinate undoes the boundary parametrization. -/
+theorem boundaryProj_boundaryParam (x : EuclideanSpace ℝ (Fin n)) :
+    boundaryProj n (boundaryParam n x) = x := by
+  rw [boundaryProj_coe, boundaryParam_coe, euclideanHalfSpaceBoundaryProj_param]
+
+/-- On the boundary of the half-space, deleting and reinserting the zeroth coordinate is the
+identity. -/
+@[simp]
+theorem boundaryParam_boundaryProj {y : EuclideanHalfSpace (n + 1)} (hy : y.1 0 = 0) :
+    boundaryParam n (euclideanHalfSpaceBoundaryProj n y.1) = y :=
+  Subtype.ext (euclideanHalfSpaceBoundaryParam_proj (mem_euclideanHalfSpaceBoundary.2 hy))
+
+/-- The boundary parametrization is continuous. -/
+theorem continuous_boundaryParam : Continuous (boundaryParam n) :=
+  (euclideanHalfSpaceBoundaryParam n).continuous.subtype_mk _
+
+/-- The boundary projection is continuous. -/
+theorem continuous_boundaryProj : Continuous (boundaryProj n) :=
+  (euclideanHalfSpaceBoundaryProj n).continuous.comp continuous_subtype_val
+
+/-- The inverse of the model map `𝓡∂ (n + 1)` sends the parametrized coordinate hyperplane to the
+boundary parametrization. -/
+@[simp]
+theorem modelWithCornersEuclideanHalfSpace_symm_boundaryParam
+    (x : EuclideanSpace ℝ (Fin n)) :
+    (𝓡∂ (n + 1)).symm (euclideanHalfSpaceBoundaryParam n x) = boundaryParam n x := by
+  refine Subtype.ext ?_
+  rw [modelWithCornersEuclideanHalfSpace_symm_apply]
+  ext i
+  refine Fin.cases ?_ (fun j ↦ ?_) i <;> simp
+
+/-- The coordinate hyperplane lies in the range of the half-space model. -/
+theorem boundaryParam_mem_range (x : EuclideanSpace ℝ (Fin n)) :
+    euclideanHalfSpaceBoundaryParam n x ∈ range (𝓡∂ (n + 1)) := by
+  rw [range_modelWithCornersEuclideanHalfSpace]
+  simp
+
+end EuclideanHalfSpace
+
+/-- The boundary of the Euclidean half-space, viewed as a manifold over itself, is the coordinate
+hyperplane where the zeroth coordinate vanishes. -/
+@[simp]
+theorem boundary_euclideanHalfSpace (n : ℕ) :
+    (𝓡∂ (n + 1)).boundary (EuclideanHalfSpace (n + 1)) = {y | y.1 0 = 0} := by
+  ext y
+  rw [ModelWithCorners.boundary, mem_ofPred_eq, ModelWithCorners.isBoundaryPoint_iff,
+    frontier_range_modelWithCornersEuclideanHalfSpace]
+  simp [extChartAt, chartAt_self_eq, eq_comm]
+
+end TauCeti
+
+namespace ContinuousLinearMap
+
+open Filter Topology in
+/-- A continuous linear functional on `ℝᵏ` which vanishes at a point `p` of the boundary hyperplane
+of the half-space `{y | y 0 ≥ 0}`, and which near `p` within the half-space is positive off the
+hyperplane, is a positive multiple of the boundary coordinate `u ↦ u 0`. -/
+theorem exists_pos_eq_mul_apply_zero_of_eventually_pos {k : ℕ} [NeZero k]
+    (ν : EuclideanSpace ℝ (Fin k) →L[ℝ] ℝ) {p : EuclideanSpace ℝ (Fin k)} (hp : p 0 = 0)
+    (hνp : ν p = 0) (hpos : ∀ᶠ u in 𝓝[{y | 0 ≤ y 0}] p, 0 < u 0 → 0 < ν u) :
+    ∃ c : ℝ, 0 < c ∧ ∀ u, ν u = c * u 0 := by
+  -- Every direction into the half-space is followed for a short positive time where the
+  -- hypothesis holds.
+  have key : ∀ v : EuclideanSpace ℝ (Fin k), 0 ≤ v 0 →
+      ∃ t : ℝ, 0 < t ∧ (0 < (p + t • v) 0 → 0 < ν (p + t • v)) := by
+    intro v hv
+    have hlim : Tendsto (fun t : ℝ => p + t • v) (𝓝[>] 0) (𝓝[{y | 0 ≤ y 0}] p) := by
+      refine tendsto_nhdsWithin_iff.2 ⟨?_, ?_⟩
+      · have hc : Continuous fun t : ℝ => p + t • v := by fun_prop
+        simpa using (hc.tendsto 0).mono_left nhdsWithin_le_nhds
+      · filter_upwards [self_mem_nhdsWithin] with t (ht : 0 < t)
+        simp only [PiLp.add_apply, PiLp.smul_apply, hp, smul_eq_mul, zero_add]
+        positivity
+    obtain ⟨t, ht, ht'⟩ := ((hlim.eventually hpos).and self_mem_nhdsWithin).exists
+    exact ⟨t, ht', ht⟩
+  have hshift : ∀ (t : ℝ) (v : EuclideanSpace ℝ (Fin k)), ν (p + t • v) = t * ν v := by
+    intro t v
+    rw [map_add, map_smul, hνp, zero_add, smul_eq_mul]
+  -- The functional is positive on the open half-space.
+  have hν_pos : ∀ v : EuclideanSpace ℝ (Fin k), 0 < v 0 → 0 < ν v := by
+    intro v hv
+    obtain ⟨t, ht, htp⟩ := key v hv.le
+    have := htp (by simp [hp, hv, ht])
+    rw [hshift] at this
+    exact pos_of_mul_pos_right this ht.le
+  set e₀ : EuclideanSpace ℝ (Fin k) := EuclideanSpace.single 0 1
+  have he₀ : e₀ 0 = 1 := by simp [e₀]
+  have hc : 0 < ν e₀ := hν_pos e₀ (by rw [he₀]; exact zero_lt_one)
+  have hν_nonneg : ∀ v : EuclideanSpace ℝ (Fin k), 0 ≤ v 0 → 0 ≤ ν v := by
+    intro v hv
+    rcases hv.lt_or_eq with hv | hv
+    · exact (hν_pos v hv).le
+    · by_contra hneg
+      push Not at hneg
+      -- Move `v` slightly into the open half-space, to where `ν` would vanish.
+      have hδ : 0 < -ν v / ν e₀ := div_pos (neg_pos.2 hneg) hc
+      have := hν_pos (v + (-ν v / ν e₀) • e₀) (by simp [he₀, ← hv, hδ])
+      rw [map_add, map_smul, smul_eq_mul, div_mul_cancel₀ _ hc.ne'] at this
+      simp at this
+  exact ⟨ν e₀, hc, Module.Dual.apply_eq_mul_apply_of_nonneg
+    (EuclideanSpace.projₗ (𝕜 := ℝ) 0) (ν : EuclideanSpace ℝ (Fin k) →ₗ[ℝ] ℝ) he₀ hν_nonneg⟩
+
+end ContinuousLinearMap

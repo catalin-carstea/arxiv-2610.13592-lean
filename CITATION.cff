@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use or build upon this formalization, please cite the four authors and acknowledge bundled upstream code separately."
+title: "Conformal Poisson embedding in Lean"
+type: software
+version: 0.1.0
+date-released: "2026-11-18"
+license: BSD-3-Clause
+authors:
+  - family-names: "Cârstea"
+    given-names: "Cătălin I."
+  - family-names: "Liimatainen"
+    given-names: "Tony"
+  - family-names: "Lin"
+    given-names: "Yi-Hsuan"
+  - family-names: "Trad"
+    given-names: "William"
+abstract: "A Lean formalization of analytic anisotropic Calderón uniqueness with a signed potential from an arbitrary open boundary patch, using the conformal Poisson embedding method."
+preferred-citation:
+  type: article
+  title: "The conformal Poisson embedding method for the anisotropic Calderón problem with a potential"
+  authors:
+    - family-names: "Cârstea"
+      given-names: "Cătălin I."
+    - family-names: "Liimatainen"
+      given-names: "Tony"
+    - family-names: "Lin"
+      given-names: "Yi-Hsuan"
+    - family-names: "Trad"
+      given-names: "William"
+  year: 2026
+  url: "https://arxiv.org/abs/2610.13592v1"

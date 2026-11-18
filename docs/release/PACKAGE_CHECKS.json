@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-18",
+  "platform": "Linux x86_64",
+  "toolchain": "leanprover/lean4:v4.36.0-rc2",
+  "commands": {
+    "build": {
+      "command": "lake --no-cache build",
+      "exit_code": 0,
+      "seconds": 1682.244,
+      "memory_max_mib": 9728,
+      "observed_cgroup_peak_mib": 9728.0,
+      "log_sha256": "3bee47d2a62cb8d7dd8e03786c7baaaf715a0b829c8e8101c5c58cc5972975a1"
+    },
+    "inspect": {
+      "command": "lake env lean Check.lean",
+      "exit_code": 0,
+      "seconds": 12.026,
+      "memory_max_mib": 9728,
+      "observed_cgroup_peak_mib": 3490.2,
+      "log_sha256": "38909527edc20fb56b02f60475a370ade6a2e09120935435a3c04739bcfd60af"
+    },
+    "comparator": {
+      "command": "lake comparator --config ComparatorChallenges/ConformalPoisson.json",
+      "exit_code": 0,
+      "seconds": 622.101,
+      "memory_max_mib": 9728,
+      "observed_cgroup_peak_mib": 4930.6,
+      "log_sha256": "5311c3781ceee42b639fd6c8f8790c78c10254665b66c5f5eceb9f2c45cd70bc"
+    }
+  },
+  "stock_lake_comparator": true,
+  "sandbox_enabled": true,
+  "kernel": "Lean default",
+  "permitted_axioms": [
+    "propext",
+    "Quot.sound",
+    "Classical.choice"
+  ],
+  "additional_paranoid_checkers_run": false,
+  "ratified_proof_files_unchanged": 817,
+  "canonical_tauceti_files_unchanged": 253,
+  "source_integrity_check": "passed",
+  "altered_challenge_rejection_test": "passed",
+  "citation_file_format_1_2_0_schema_validation": "passed",
+  "cache_qualification": "Pinned Mathlib/transitive dependency build caches were copied locally; all package Proof, canonical TauCeti, Solution and Consumer modules were built from the packaged sources.",
+  "publication": "Local source package only; no remote repository was created or pushed.",
+  "support_build": {
+    "modules": 1068,
+    "workers": 2,
+    "seconds": 1215.215,
+    "exit_code": 0,
+    "qualification": "Resumed from the first single-worker incremental pass; both passes compiled the packaged sources inside a shared 9728 MiB cap."
+  }
+}

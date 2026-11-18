@@ -1,0 +1,19 @@
+name = "conformal_poisson"
+version = "0.1.0"
+defaultTargets = ["ConformalPoissonFormalization"]
+allowNonModules = true
+weakLeanArgs = ["-j1", "-M9728"]
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "2ddf59c8f14245864e6c0ed227a2dab76b9efea2"
+
+[[lean_lib]]
+name = "ConformalPoissonFormalization"
+roots = ["Consumer"]
+globs = ["Solution", "Consumer", "Proof.+", "TauCeti.+"]
+
+[[lean_lib]]
+name = "ComparatorChallenges"
+globs = ["ComparatorChallenges.+"]

@@ -1,0 +1,330 @@
+/-
+Copyright (c) 2026 The Tau Ceti contributors. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: The Tau Ceti contributors
+-/
+module
+
+public import Proof.FoundationSupplement.TauCeti.Analysis.Sobolev.W1p.Basic
+public import Proof.FoundationSupplement.TauCeti.Analysis.Sobolev.W1p.Zero
+public import Mathlib.MeasureTheory.Integral.Average
+import Proof.FoundationSupplement.TauCeti.MeasureTheory.Function.Lp.Norm
+import Proof.FoundationSupplement.TauCeti.MeasureTheory.Function.Lp.Restriction
+
+/-!
+# Restriction of first-order Sobolev functions
+
+A weakly differentiable function on an open set remains weakly differentiable on every smaller
+open set.  This file packages that operation as the contractive continuous linear map
+`TauCeti.W1p.restrictL`.  Its value and weak gradient are represented by the same functions on
+the smaller domain, and restriction is functorial.
+
+Restriction is the basic localization operation for Sobolev spaces.  In particular, it lets
+interior regularity arguments pass from a weak solution on `Ω` to smaller open sets.
+
+## Main declarations
+
+* `TauCeti.W1p.restrictL`: the contractive restriction map from `W^{1,p}(Ω)` to
+  `W^{1,p}(U)` for `U ⊆ Ω`.
+* `TauCeti.W1p.value_restrictL` and `TauCeti.W1p.gradient_restrictL`: restriction commutes with
+  the value and weak-gradient projections; their `_ae` variants identify representatives.
+* `TauCeti.W1p.value_restrictL_ofTestFunctionₗ_ae`: a restricted test function has its original
+  value almost everywhere on the smaller open set.
+* `TauCeti.W1p.restrictL_self` and `TauCeti.W1p.restrictL_restrictL`: restriction is functorial.
+* `TauCeti.W1p.setIntegral_norm_gradient_sub_sq_eq`: the `L²` distance on the smaller set between
+  the weak gradients of a function and of a function defined only there.
+* `TauCeti.W1p.continuous_setAverage_value`: the mean of the value component over a fixed
+  subset depends continuously on the Sobolev function.
+
+## References
+
+L. C. Evans, *Partial Differential Equations*, Chapter 5, §5.2.
+-/
+
+public section
+
+noncomputable section
+
+namespace TauCeti
+
+open Filter _root_.MeasureTheory Set TopologicalSpace
+open scoped Distributions ENNReal Gradient Topology
+
+variable {E : Type*} [MeasurableSpace E] [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+  [FiniteDimensional ℝ E] [BorelSpace E] {mu : Measure E} [mu.IsAddHaarMeasure]
+  {Omega U V : Opens E} {p : ENNReal} [Fact (1 ≤ p)] {S : Set E}
+
+/-! ### Restriction of ambient jets -/
+
+omit [FiniteDimensional ℝ E] [mu.IsAddHaarMeasure] in
+/-- Restriction of an `Lᵖ` value-gradient jet to a smaller open set. -/
+def Sobolev1JetLp.restrictL (hU : U ≤ Omega) :
+    Sobolev1JetLp mu Omega p →L[ℝ] Sobolev1JetLp mu U p :=
+  Lp.LpToLpOfMeasureLeSMul (c := 1) (by simp) (by
+    simpa only [one_smul] using
+      Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU))
+
+omit [FiniteDimensional ℝ E] [BorelSpace E] [mu.IsAddHaarMeasure] in
+/-- Restricting an ambient jet keeps the same representative on the smaller open set. -/
+theorem Sobolev1JetLp.coeFn_restrictL (hU : U ≤ Omega) (J : Sobolev1JetLp mu Omega p) :
+    Sobolev1JetLp.restrictL hU J =ᵐ[mu.restrict U] J := by
+  exact Lp.coeFn_LpToLpOfMeasureLeSMul (by simp)
+    (by simpa only [one_smul] using
+      Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)) J
+
+omit [FiniteDimensional ℝ E] [BorelSpace E] [mu.IsAddHaarMeasure] in
+/-- Restriction of ambient jets does not increase the `Lᵖ` norm. -/
+theorem Sobolev1JetLp.norm_restrictL_le (hU : U ≤ Omega) (J : Sobolev1JetLp mu Omega p) :
+    ‖Sobolev1JetLp.restrictL hU J‖ ≤ ‖J‖ := by
+  have hop : ‖Sobolev1JetLp.restrictL (mu := mu) (p := p) hU‖ ≤ 1 := by
+    simpa only [Sobolev1JetLp.restrictL, ENNReal.toReal_one, Real.one_rpow] using
+      Lp.norm_LpToLpOfMeasureLeSMul_le (E := Sobolev1Jet E) (p := p)
+        (μ := mu.restrict U) (ν := mu.restrict Omega) (c := 1) (by simp)
+        (by simpa only [one_smul] using
+          Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU))
+  simpa only [one_mul] using
+    (Sobolev1JetLp.restrictL (mu := mu) (p := p) hU).le_of_opNorm_le hop J
+
+omit [FiniteDimensional ℝ E] [BorelSpace E] [mu.IsAddHaarMeasure] in
+/-- The value component of a restricted ambient jet is the restriction of its value component. -/
+@[simp]
+theorem Sobolev1JetLp.value_restrictL (hU : U ≤ Omega) (J : Sobolev1JetLp mu Omega p) :
+    Sobolev1JetLp.value (Sobolev1JetLp.restrictL hU J) =
+      Lp.LpToLpOfMeasureLeSMul (c := 1) (by simp) (by
+        simpa only [one_smul] using
+          Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU))
+        (Sobolev1JetLp.value J) := by
+  apply Lp.ext
+  have hmeasure : mu.restrict U ≤ (1 : ENNReal) • mu.restrict Omega := by
+    simpa only [one_smul] using
+      Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)
+  have hvalue := (Sobolev1JetLp.value_apply_ae J).filter_mono
+    (MeasureTheory.ae_mono (Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)))
+  filter_upwards [Sobolev1JetLp.value_apply_ae (Sobolev1JetLp.restrictL hU J),
+    Sobolev1JetLp.coeFn_restrictL hU J,
+    Lp.coeFn_LpToLpOfMeasureLeSMul (by simp) hmeasure (Sobolev1JetLp.value J), hvalue]
+    with x hleft hrestrict hright hvalue
+  rw [hleft, hrestrict, hright, hvalue]
+
+omit [FiniteDimensional ℝ E] [BorelSpace E] [mu.IsAddHaarMeasure] in
+/-- The gradient component of a restricted ambient jet is the restriction of its gradient
+component. -/
+@[simp]
+theorem Sobolev1JetLp.gradient_restrictL (hU : U ≤ Omega) (J : Sobolev1JetLp mu Omega p) :
+    Sobolev1JetLp.gradient (Sobolev1JetLp.restrictL hU J) =
+      Lp.LpToLpOfMeasureLeSMul (c := 1) (by simp) (by
+        simpa only [one_smul] using
+          Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU))
+        (Sobolev1JetLp.gradient J) := by
+  apply Lp.ext
+  have hmeasure : mu.restrict U ≤ (1 : ENNReal) • mu.restrict Omega := by
+    simpa only [one_smul] using
+      Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)
+  have hgradient := (Sobolev1JetLp.gradient_apply_ae J).filter_mono
+    (MeasureTheory.ae_mono (Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)))
+  filter_upwards [Sobolev1JetLp.gradient_apply_ae (Sobolev1JetLp.restrictL hU J),
+    Sobolev1JetLp.coeFn_restrictL hU J,
+    Lp.coeFn_LpToLpOfMeasureLeSMul (by simp) hmeasure (Sobolev1JetLp.gradient J), hgradient]
+    with x hleft hrestrict hright hgradient
+  rw [hleft, hrestrict, hright, hgradient]
+
+/-! ### Restriction of Sobolev functions -/
+
+/-- The restricted jet still satisfies the weak-derivative identity. -/
+private theorem Sobolev1JetLp.restrictL_mem_w1pSubmodule (hU : U ≤ Omega)
+    (u : W1p mu Omega p) :
+    Sobolev1JetLp.restrictL hU (u : Sobolev1JetLp mu Omega p) ∈ w1pSubmodule mu U p := by
+  rw [mem_w1pSubmodule_iff_hasWeakFDerivOn]
+  let J := Sobolev1JetLp.restrictL hU (u : Sobolev1JetLp mu Omega p)
+  have hJ := Sobolev1JetLp.coeFn_restrictL (mu := mu) (p := p) hU
+    (u : Sobolev1JetLp mu Omega p)
+  have hu_value := (W1p.value_apply_ae u).filter_mono
+    (MeasureTheory.ae_mono (Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)))
+  have hvalue : Sobolev1JetLp.value J =ᵐ[mu.restrict U] W1p.value u := by
+    filter_upwards [Sobolev1JetLp.value_apply_ae J, hu_value, hJ] with x hJv huv hJu
+    rw [hJv, huv, hJu]
+  have hu_gradient := (W1p.gradient_apply_ae u).filter_mono
+    (MeasureTheory.ae_mono (Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)))
+  have hgradient : Sobolev1JetLp.gradient J =ᵐ[mu.restrict U] W1p.gradient u := by
+    filter_upwards [Sobolev1JetLp.gradient_apply_ae J, hu_gradient, hJ]
+      with x hJg hug hJu
+    rw [hJg, hug, hJu]
+  refine ((W1p.hasWeakFDerivOn u).mono hU).congr_ae hvalue.symm |>.congr_ae_deriv ?_
+  filter_upwards [hgradient] with x hx
+  rw [Sobolev1JetLp.candidateWeakFDeriv_def, hx]
+
+/-- **Restriction of first-order Sobolev functions.**  If `U ⊆ Ω`, this is the continuous
+linear map `W^{1,p}(Ω) → W^{1,p}(U)` obtained by restricting both the value and weak gradient.
+It has operator norm at most one. -/
+def W1p.restrictL (hU : U ≤ Omega) : W1p mu Omega p →L[ℝ] W1p mu U p :=
+  ContinuousLinearMap.codRestrict
+    ((Sobolev1JetLp.restrictL hU).comp (w1pSubmodule mu Omega p).toSubmodule.subtypeL)
+    (w1pSubmodule mu U p).toSubmodule
+    (Sobolev1JetLp.restrictL_mem_w1pSubmodule hU)
+
+/-- The ambient jet of a restricted Sobolev function is the restriction of its ambient jet. -/
+@[simp]
+theorem W1p.coe_restrictL (hU : U ≤ Omega) (u : W1p mu Omega p) :
+    ((W1p.restrictL hU u : W1p mu U p) : Sobolev1JetLp mu U p) =
+      Sobolev1JetLp.restrictL hU (u : Sobolev1JetLp mu Omega p) :=
+  (rfl)
+
+/-- The value component of a restricted Sobolev function is the restriction of its value
+component. -/
+@[simp]
+theorem W1p.value_restrictL (hU : U ≤ Omega) (u : W1p mu Omega p) :
+    W1p.value (W1p.restrictL hU u) =
+      Lp.LpToLpOfMeasureLeSMul (c := 1) (by simp) (by
+        simpa only [one_smul] using
+          Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)) (W1p.value u) := by
+  rw [W1p.value_coe, W1p.coe_restrictL, Sobolev1JetLp.value_restrictL, W1p.value_coe]
+
+/-- The gradient component of a restricted Sobolev function is the restriction of its gradient
+component. -/
+@[simp]
+theorem W1p.gradient_restrictL (hU : U ≤ Omega) (u : W1p mu Omega p) :
+    W1p.gradient (W1p.restrictL hU u) =
+      Lp.LpToLpOfMeasureLeSMul (c := 1) (by simp) (by
+        simpa only [one_smul] using
+          Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)) (W1p.gradient u) := by
+  rw [W1p.gradient_coe, W1p.coe_restrictL, Sobolev1JetLp.gradient_restrictL,
+    W1p.gradient_coe]
+
+/-- Restriction keeps the same value representative on the smaller open set. -/
+theorem W1p.value_restrictL_ae (hU : U ≤ Omega) (u : W1p mu Omega p) :
+    W1p.value (W1p.restrictL hU u) =ᵐ[mu.restrict U] W1p.value u := by
+  rw [W1p.value_restrictL]
+  exact Lp.coeFn_LpToLpOfMeasureLeSMul (by simp)
+    (by simpa only [one_smul] using
+      Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)) (W1p.value u)
+
+/-- Restricting a test function from `Omega` to `U` preserves its value almost everywhere on
+`U`. -/
+theorem W1p.value_restrictL_ofTestFunctionₗ_ae (hU : U ≤ Omega) (φ : 𝓓(Omega, ℝ)) :
+    W1p.value (W1p.restrictL hU (W1p.ofTestFunctionₗ mu Omega p φ)) =ᵐ[mu.restrict U] φ :=
+  (W1p.value_restrictL_ae hU _).trans
+    (ae_restrict_of_ae_restrict_of_subset (SetLike.coe_subset_coe.2 hU)
+      (W1p.value_ofTestFunctionₗ_ae φ))
+
+/-- A Sobolev function on `Omega` whose value agrees almost everywhere on the smaller open set `U`
+with the value of `u` restricts to `u` on `U`. -/
+theorem W1p.restrictL_eq_of_value_ae_eq (hU : U ≤ Omega) {u : W1p mu U p} {w : W1p mu Omega p}
+    (hvalw : W1p.value w =ᵐ[mu.restrict U] W1p.value u) : W1p.restrictL hU w = u :=
+  W1p.ext_value (Lp.ext ((W1p.value_restrictL_ae hU w).trans hvalw))
+
+/-- An extension operator, a right inverse of restriction to the smaller open set `U`, keeps the
+value representative on `U`. -/
+theorem W1p.value_ae_eq_of_restrictL_comp_eq_id (hU : U ≤ Omega)
+    {T : W1p mu U p →L[ℝ] W1p mu Omega p}
+    (hT : (W1p.restrictL hU).comp T = ContinuousLinearMap.id ℝ (W1p mu U p)) (u : W1p mu U p) :
+    W1p.value (T u) =ᵐ[mu.restrict U] W1p.value u := by
+  have hu : W1p.restrictL hU (T u) = u := by
+    simpa using congrArg (· u) hT
+  filter_upwards [W1p.value_restrictL_ae hU (T u)] with x hx
+  rw [← hx, hu]
+
+/-- Restriction keeps the same weak-gradient representative on the smaller open set. -/
+theorem W1p.gradient_restrictL_ae (hU : U ≤ Omega) (u : W1p mu Omega p) :
+    W1p.gradient (W1p.restrictL hU u) =ᵐ[mu.restrict U] W1p.gradient u := by
+  rw [W1p.gradient_restrictL]
+  exact Lp.coeFn_LpToLpOfMeasureLeSMul (by simp)
+    (by simpa only [one_smul] using
+      Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hU)) (W1p.gradient u)
+
+/-- Restriction does not increase the Sobolev norm. -/
+theorem W1p.norm_restrictL_le (hU : U ≤ Omega) (u : W1p mu Omega p) :
+    ‖W1p.restrictL hU u‖ ≤ ‖u‖ :=
+  Sobolev1JetLp.norm_restrictL_le hU (u : Sobolev1JetLp mu Omega p)
+
+/-- The restriction operator has norm at most one. -/
+theorem W1p.norm_restrictL_le_one (hU : U ≤ Omega) :
+    ‖W1p.restrictL (mu := mu) (p := p) hU‖ ≤ 1 :=
+  ContinuousLinearMap.opNorm_le_bound _ zero_le_one fun u => by
+    simpa only [one_mul] using W1p.norm_restrictL_le hU u
+
+/-- Restricting a Sobolev function to its original domain does nothing. -/
+@[simp]
+theorem W1p.restrictL_self (u : W1p mu Omega p) : W1p.restrictL le_rfl u = u := by
+  apply W1p.ext_value
+  apply Lp.ext
+  exact W1p.value_restrictL_ae le_rfl u
+
+/-- Restriction is functorial: restricting from `Ω` to `U` and then to `V` agrees with direct
+restriction from `Ω` to `V`. -/
+@[simp]
+theorem W1p.restrictL_restrictL (hU : U ≤ Omega) (hV : V ≤ U) (u : W1p mu Omega p) :
+    W1p.restrictL hV (W1p.restrictL hU u) = W1p.restrictL (hV.trans hU) u := by
+  apply W1p.ext_value
+  apply Lp.ext
+  have hsecond : W1p.value (W1p.restrictL hU u) =ᵐ[mu.restrict V] W1p.value u :=
+    (W1p.value_restrictL_ae hU u).filter_mono
+      (MeasureTheory.ae_mono (Measure.restrict_mono_set mu (SetLike.coe_subset_coe.mpr hV)))
+  exact ((W1p.value_restrictL_ae hV (W1p.restrictL hU u)).trans hsecond).trans
+    (W1p.value_restrictL_ae (hV.trans hU) u).symm
+
+/-- The squared `L²(U)` distance between the weak gradients of `u ∈ W^{1,2}(Ω)` and
+`w ∈ W^{1,2}(U)` is the squared norm of the weak gradient of the difference of the restriction of
+`u` to `U` and `w`. -/
+theorem W1p.setIntegral_norm_gradient_sub_sq_eq (hU : U ≤ Omega) (u : W1p mu Omega 2)
+    (w : W1p mu U 2) :
+    ∫ x in U, ‖W1p.gradient u x - W1p.gradient w x‖ ^ 2 ∂mu =
+      ‖W1p.gradient (W1p.restrictL hU u - w)‖ ^ 2 := by
+  have hsub : W1p.gradient (W1p.restrictL hU u - w) =
+      W1p.gradient (W1p.restrictL hU u) - W1p.gradient w := by
+    simp only [← W1p.gradientL_apply, map_sub]
+  rw [← MeasureTheory.Lp.integral_norm_sq_eq_norm_sq]
+  refine integral_congr_ae ?_
+  filter_upwards [W1p.gradient_restrictL_ae hU u,
+    Lp.coeFn_sub (W1p.gradient (W1p.restrictL hU u)) (W1p.gradient w)] with x h1 h2
+  rw [hsub, h2, Pi.sub_apply, h1]
+
+/-! ### Subset averages -/
+
+omit [FiniteDimensional ℝ E] in
+/-- The mean of the value of a first-order Sobolev function over a fixed subset
+depends continuously on the function (for a subset of infinite measure the mean is `0`). -/
+theorem W1p.continuous_setAverage_value (hSU : S ⊆ (U : Set E)) :
+    Continuous fun v : W1p mu U p => ⨍ y in S, W1p.value v y ∂mu := by
+  by_cases hSfin : mu S = ∞
+  · simp only [setAverage_eq, measureReal_def, hSfin, ENNReal.toReal_top, inv_zero, zero_smul]
+    exact continuous_const
+  have hrs : (mu.restrict (U : Set E)).restrict S = mu.restrict S :=
+    Measure.restrict_restrict_of_subset hSU
+  have hmeas : (mu.restrict (U : Set E)) S = mu S := by
+    rw [← Measure.restrict_apply_univ, hrs, Measure.restrict_apply_univ]
+  have hEq : ∀ v : W1p mu U p, (⨍ y in S, W1p.value v y ∂mu) =
+      (mu.real S)⁻¹ * ∫ y in S, W1p.valueL v y ∂(mu.restrict (U : Set E)) := fun v => by
+    rw [setAverage_eq, smul_eq_mul, W1p.valueL_apply, hrs]
+  have hSlt : (mu.restrict (U : Set E)) S < ∞ := by
+    rw [hmeas]
+    exact lt_top_iff_ne_top.2 hSfin
+  have hF : Continuous fun f : Lp ℝ p (mu.restrict (U : Set E)) =>
+      ∫ y in S, f y ∂(mu.restrict (U : Set E)) :=
+    (Set.setIntegralLp (𝕜 := ℝ) (F := ℝ) (μ := mu.restrict (U : Set E)) (p := p) S
+      hSlt).continuous.congr fun f => Set.setIntegralLp_apply (𝕜 := ℝ) S hSlt f
+  simp only [hEq]
+  exact continuous_const.mul
+    (hF.comp' (W1p.valueL (mu := mu) (Omega := U) (p := p)).continuous)
+
+omit [FiniteDimensional ℝ E] in
+/-- If Sobolev classes `a n` converge to `u`, their gradients converge in `L¹` on any open set
+`V` of finite measure contained in the domain. -/
+theorem W1p.tendsto_lintegral_gradient_sub (hV : V ≤ Omega)
+    {a : ℕ → W1p mu Omega p} {u : W1p mu Omega p} (ha : Tendsto a atTop (𝓝 u))
+    [IsFiniteMeasure (mu.restrict (V : Set E))] :
+    Tendsto (fun n => ∫⁻ x in (V : Set E), ‖W1p.gradient (a n) x - W1p.gradient u x‖ₑ ∂mu)
+      atTop (𝓝 0) := by
+  have hrs : (mu.restrict (Omega : Set E)).restrict (V : Set E) = mu.restrict (V : Set E) :=
+    Measure.restrict_restrict_of_subset hV
+  have hlt : (mu.restrict (Omega : Set E)) (V : Set E) < ⊤ := by
+    rw [← Measure.restrict_apply_univ, hrs, Measure.restrict_apply_univ]
+    simpa only [Measure.restrict_apply_univ] using
+      measure_lt_top (mu.restrict (V : Set E)) Set.univ
+  have hgrad : Tendsto (fun n => W1p.gradient (a n)) atTop (𝓝 (W1p.gradient u)) := by
+    simpa only [Function.comp_def, W1p.gradientL_apply] using
+      ((W1p.gradientL (mu := mu) (Omega := Omega) (p := p)).continuous.tendsto u).comp ha
+  simpa only [hrs] using tendsto_setLIntegral_enorm_sub_of_tendsto_Lp hlt hgrad
+    (a := fun n => W1p.gradient (a n)) (a₀ := W1p.gradient u) (fun n => ae_eq_refl _)
+    (ae_eq_refl _)
+
+end TauCeti
